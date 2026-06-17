@@ -7,6 +7,7 @@ import ArticleDetail from '../views/ArticleDetail.vue'
 import Admin from '../views/Admin.vue'
 import CreateArticle from '../views/CreateArticle.vue'
 import EditArticle from '../views/EditArticle.vue'
+import { useUserStore } from '../stores/user'
 
 const routes = [
   { path: '/', name: 'Home', component: Home },
@@ -25,13 +26,11 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  const isAuthenticated = localStorage.getItem('token')
-  if (to.name === 'Admin' || to.name === 'CreateArticle' || to.name === 'EditArticle') {
-    if (!isAuthenticated) {
-      next({ name: 'Login' })
-    } else {
-      next()
-    }
+  const userStore = useUserStore()
+  const authRequired = ['Admin', 'CreateArticle', 'EditArticle']
+  
+  if (authRequired.includes(to.name) && !userStore.isLoggedIn) {
+    next({ name: 'Login', query: { redirect: to.fullPath } })
   } else {
     next()
   }

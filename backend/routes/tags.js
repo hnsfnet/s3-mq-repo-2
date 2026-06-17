@@ -1,135 +1,141 @@
 const express = require('express')
 const router = express.Router()
-const jwt = require('jsonwebtoken')
 const Tag = require('../models/Tag')
 const Article = require('../models/Article')
+const { protect } = require('../middleware/auth')
+const { AppError, asyncHandler } = require('../middleware/errorHandler')
 
-const authenticate = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1]
-  if (!token) {
-    return res.status(401).json({ message: '未授权' })
+router.get('/', asyncHandler(async (req, res) => {
+  const sortBy = req.query.sortBy || 'count'
+  const sortOrder = req.query.order === 'asc' ? 1 : -1
+
+  const sortOptions = {}
+  sortOptions[sortBy] = sortOrder
+  if (sortBy !== 'createdAt') {
+    sortOptions.createdAt = -1
   }
-  jwt.verify(token, 'secretkey', (err, decoded) => {
-    if (err) {
-      return res.status(401).json({ message: '无效令牌' })
-    }
-    req.user = decoded
-    next()
+
+  const tags = await Tag.find().sort(sortOptions)
+
+  res.status(200).json({
+    status: 'success',
+    results: tags.length,
+    data: tags
   })
-}
+}))
 
-router.get('/', async (req, res) => {
-  try {
-    const tags = await Tag.find()
-      .sort({ count: -1, createdAt: -1 })
-    res.json(tags)
-  } catch (err) {
-    res.status(500).json({ message: '服务器错误' })
-  }
-})
+router.get('/popular', asyncHandler(async (req, res) => {
+  const limit = parseInt(req.query.limit) || 10
 
-router.get('/popular', async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 10
-    const tags = await Tag.find()
-      .sort({ count: -1 })
-      .limit(limit)
-    res.json(tags)
-  } catch (err) {
-    res.status(500).json({ message: '服务器错误' })
-  }
-})
+  const tags = await Tag.find()
+    .sort({ count: -1, createdAt: -1 })
+    .limit(limit)
 
-router.post('/', authenticate, async (req, res) => {
-  try {
-    const { name, description, color } = req.body
-    
-    if (!name || !name.trim()) {
-      return res.status(400).json({ message: '标签名称不能为空' })
-    }
-    
-    const trimmedName = name.trim()
-    const existingTag = await Tag.findOne({ name: trimmedName })
-    
-    if (existingTag) {
-      return res.status(400).json({ message: '标签已存在' })
-    }
-    
-    const tag = await Tag.create({
-      name: trimmedName,
-      description: description || '',
-      color: color || '#667eea'
-    })
-    
-    res.status(201).json(tag)
-  } catch (err) {
-    res.status(500).json({ message: '服务器错误' })
-  }
-})
+  res.status(200).json({
+    status: 'success',
+    results: tags.length,
+    data: tags
+  })
+}))
 
-router.put('/:id', authenticate, async (req, res) => {
-  try {
-    const { name, description, color } = req.body
-    const tag = await Tag.findById(req.params.id)
-    
-    if (!tag) {
-      return res.status(404).json({ message: '标签不存在' })
-    }
-    
-    if (name && name.trim() && name.trim() !== tag.name) {
-      const existingTag = await Tag.findOne({ name: name.trim() })
-      if (existingTag && existingTag._id.toString() !== tag._id.toString()) {
-        return res.status(400).json({ message: '标签名称已存在' })
-      }
-      tag.name = name.trim()
-    }
-    
-    if (description !== undefined) {
-      tag.description = description
-    }
-    
-    if (color) {
-      tag.color = color
-    }
-    
-    await tag.save()
-    res.json(tag)
-  } catch (err) {
-    res.status(500).json({ message: '服务器错误' })
-  }
-})
+router.get('/:name', asyncHandler(async (req, res, next) => {
+  const tag = await Tag.findOne({ name: req.params.name })
 
-router.delete('/:id', authenticate, async (req, res) => {
-  try {
-    const tag = await Tag.findById(req.params.id)
-    
-    if (!tag) {
-      return res.status(404).json({ message: '标签不存在' })
-    }
-    
-    await Tag.findByIdAndDelete(req.params.id)
-    
-    await Article.updateMany(
-      { tags: tag.name },
-      { $pull: { tags: tag.name } }
-    )
-    
-    res.json({ message: '删除成功' })
-  } catch (err) {
-    res.status(500).json({ message: '服务器错误' })
+  if (!tag) {
+    return next(new AppError('标签不存在', 404))
   }
-})
 
-const updateTagCounts = async (tags) => {
-  for (const tagName of tags) {
-    const count = await Article.countDocuments({ tags: tagName })
-    await Tag.findOneAndUpdate(
-      { name: tagName },
-      { $set: { count } },
-      { upsert: true }
-    )
+  const articles = await Article.find({ tags: req.params.name })
+    .populate('author', 'username')
+    .sort({ createdAt: -1 })
+    .limit(20)
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      tag,
+      articles,
+      articleCount: articles.length
+    }
+  })
+}))
+
+router.post('/', protect, asyncHandler(async (req, res, next) => {
+  const { name, description, color } = req.body
+
+  if (!name || !name.trim()) {
+    return next(new AppError('标签名称不能为空', 400))
   }
-}
+
+  const trimmedName = name.trim()
+  const existingTag = await Tag.findOne({ name: trimmedName })
+
+  if (existingTag) {
+    return next(new AppError('标签已存在', 400))
+  }
+
+  const tag = await Tag.create({
+    name: trimmedName,
+    description: description || '',
+    color: color || '#667eea'
+  })
+
+  res.status(201).json({
+    status: 'success',
+    data: tag
+  })
+}))
+
+router.put('/:id', protect, asyncHandler(async (req, res, next) => {
+  const { name, description, color } = req.body
+  const tag = await Tag.findById(req.params.id)
+
+  if (!tag) {
+    return next(new AppError('标签不存在', 404))
+  }
+
+  if (name && name.trim() && name.trim() !== tag.name) {
+    const existingTag = await Tag.findOne({ name: name.trim() })
+    if (existingTag && existingTag._id.toString() !== tag._id.toString()) {
+      return next(new AppError('标签名称已存在', 400))
+    }
+    tag.name = name.trim()
+  }
+
+  if (description !== undefined) {
+    tag.description = description
+  }
+
+  if (color) {
+    tag.color = color
+  }
+
+  await tag.save()
+
+  res.status(200).json({
+    status: 'success',
+    data: tag
+  })
+}))
+
+router.delete('/:id', protect, asyncHandler(async (req, res, next) => {
+  const tag = await Tag.findById(req.params.id)
+
+  if (!tag) {
+    return next(new AppError('标签不存在', 404))
+  }
+
+  await Tag.findByIdAndDelete(req.params.id)
+
+  await Article.updateMany(
+    { tags: tag.name },
+    { $pull: { tags: tag.name } }
+  )
+
+  res.status(200).json({
+    status: 'success',
+    message: '删除成功'
+  })
+}))
 
 module.exports = router
-module.exports.updateTagCounts = updateTagCounts

@@ -1,40 +1,40 @@
 <template>
   <div class="article-detail">
     <div class="container">
-      <div v-loading="articleLoading" v-if="article" class="article">
+      <div v-loading="articleStore.detailLoading" v-if="articleStore.currentArticle" class="article">
         <router-link to="/articles" class="back-link">
           <el-icon><ArrowLeft /></el-icon>
           返回列表
         </router-link>
-        <h1>{{ article.title }}</h1>
+        <h1>{{ articleStore.currentArticle.title }}</h1>
         <div class="meta">
           <span class="author-item">
             <el-icon><User /></el-icon>
-            {{ article.author?.username }}
+            {{ articleStore.currentArticle.author?.username }}
           </span>
           <span class="date-item">
             <el-icon><Calendar /></el-icon>
-            {{ formatDate(article.createdAt) }}
+            {{ formatDate(articleStore.currentArticle.createdAt) }}
           </span>
           <span class="view-item">
             <el-icon><View /></el-icon>
-            {{ article.views }} 阅读
+            {{ articleStore.currentArticle.views }} 阅读
           </span>
-          <span v-if="article.category" class="category-badge">
-            {{ article.category }}
+          <span v-if="articleStore.currentArticle.category" class="category-badge">
+            {{ articleStore.currentArticle.category }}
           </span>
         </div>
-        <div class="tags" v-if="article.tags && article.tags.length > 0">
+        <div class="tags" v-if="articleStore.currentArticle.tags && articleStore.currentArticle.tags.length > 0">
           <span
-            v-for="tag in article.tags"
+            v-for="tag in articleStore.currentArticle.tags"
             :key="tag"
             class="tag"
           >#{{ tag }}</span>
         </div>
-        <div class="content">{{ article.content }}</div>
-        <div class="article-footer" v-if="formatDate(article.updatedAt) !== formatDate(article.createdAt)">
+        <div class="content">{{ articleStore.currentArticle.content }}</div>
+        <div class="article-footer" v-if="formatDate(articleStore.currentArticle.updatedAt) !== formatDate(articleStore.currentArticle.createdAt)">
           <el-icon><Edit /></el-icon>
-          最后更新于 {{ formatDate(article.updatedAt) }}
+          最后更新于 {{ formatDate(articleStore.currentArticle.updatedAt) }}
         </div>
       </div>
 
@@ -43,23 +43,23 @@
           <h2>
             <el-icon><ChatDotRound /></el-icon>
             评论
-            <span class="count-badge">{{ comments.length }}</span>
+            <span class="count-badge">{{ commentStore.commentCount }}</span>
           </h2>
           <el-button
             link
             type="primary"
             :icon="Refresh"
             @click="refreshComments"
-            :loading="commentsLoading"
+            :loading="commentStore.loading"
           >刷新</el-button>
         </div>
 
-        <div v-if="isLoggedIn" class="comment-form">
+        <div v-if="userStore.isLoggedIn" class="comment-form">
           <div class="form-header">
             <el-avatar :size="36" class="user-avatar">
-              {{ currentUser?.username?.charAt(0)?.toUpperCase() }}
+              {{ userStore.userInfo?.username?.charAt(0)?.toUpperCase() }}
             </el-avatar>
-            <span class="user-name">{{ currentUser?.username }}</span>
+            <span class="user-name">{{ userStore.userInfo?.username }}</span>
           </div>
           <el-input
             v-model="newComment"
@@ -68,14 +68,14 @@
             :rows="3"
             maxlength="500"
             show-word-limit
-            :disabled="submitting"
+            :disabled="commentStore.submitting"
           ></el-input>
           <div class="form-actions">
             <span class="tip">支持纯文本评论，友善发言</span>
             <el-button
               type="primary"
               @click="submitComment"
-              :loading="submitting"
+              :loading="commentStore.submitting"
               :disabled="!newComment.trim()"
             >
               <el-icon><Promotion /></el-icon>
@@ -88,15 +88,15 @@
           请先
           <router-link to="/login">登录</router-link>
           后发表评论
-          <router-link v-if="!isLoggedIn" to="/register" class="register-link">立即注册</router-link>
+          <router-link to="/register" class="register-link">立即注册</router-link>
         </div>
 
-        <div v-loading="commentsLoading" class="comments-list">
+        <div v-loading="commentStore.loading" class="comments-list">
           <transition-group name="comment">
             <div
-              v-for="(comment, index) in comments"
+              v-for="(comment, index) in commentStore.comments"
               :key="comment._id || `temp-${index}`"
-              :class="['comment-item', { 'optimistic': comment._isNew }]"
+              :class="['comment-item', { 'optimistic': comment._isNew }"
             >
               <div class="comment-left">
                 <el-avatar :size="40" class="avatar">
@@ -112,7 +112,7 @@
                   </span>
                 </div>
                 <p class="comment-content">{{ comment.content }}</p>
-                <div class="comment-actions" v-if="canDeleteComment(comment)">
+                <div class="comment-actions" v-if="commentStore.canDeleteComment(comment, userStore.userInfo)">
                   <el-button
                     link
                     type="danger"
@@ -128,7 +128,7 @@
           </transition-group>
         </div>
 
-        <div v-if="!commentsLoading && comments.length === 0" class="empty">
+        <div v-if="!commentStore.loading && commentStore.commentCount === 0" class="empty">
           <el-empty description="暂无评论，快来发表第一条评论吧！" />
         </div>
       </div>
@@ -137,7 +137,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -153,30 +153,15 @@ import {
   Delete,
   Edit
 } from '@element-plus/icons-vue'
-import { articles as articleApi, comments as commentApi } from '../api'
+import { useArticleStore } from '../stores/article'
+import { useCommentStore } from '../stores/comment'
+import { useUserStore } from '../stores/user'
 
 const route = useRoute()
-const article = ref(null)
-const comments = ref([])
+const articleStore = useArticleStore()
+const commentStore = useCommentStore()
+const userStore = useUserStore()
 const newComment = ref('')
-const isLoggedIn = ref(!!localStorage.getItem('token'))
-const submitting = ref(false)
-const articleLoading = ref(true)
-const commentsLoading = ref(false)
-
-const currentUser = computed(() => {
-  try {
-    const userStr = localStorage.getItem('user')
-    return userStr ? JSON.parse(userStr) : null
-  } catch {
-    return null
-  }
-})
-
-const canDeleteComment = (comment) => {
-  if (!currentUser.value || !comment.author) return false
-  return comment.author._id === currentUser.value.id || comment.author.username === currentUser.value.username
-}
 
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
@@ -190,34 +175,16 @@ const formatDate = (dateStr) => {
   })
 }
 
-const loadArticle = async () => {
-  articleLoading.value = true
-  try {
-    const res = await articleApi.get(route.params.id)
-    article.value = res.data
-  } catch (err) {
-    console.error(err)
-    ElMessage.error('加载文章失败')
-  } finally {
-    articleLoading.value = false
-  }
-}
-
-const loadComments = async () => {
-  commentsLoading.value = true
-  try {
-    const res = await commentApi.list(route.params.id)
-    comments.value = res.data || []
-  } catch (err) {
-    console.error(err)
-    ElMessage.error('加载评论失败')
-  } finally {
-    commentsLoading.value = false
-  }
+const loadData = async () => {
+  const articleId = route.params.id
+  await Promise.all([
+    articleStore.loadArticleDetail(articleId),
+    commentStore.loadComments(articleId)
+  ])
 }
 
 const refreshComments = async () => {
-  await loadComments()
+  await commentStore.loadComments(route.params.id)
   ElMessage.success('评论已刷新')
 }
 
@@ -232,51 +199,15 @@ const submitComment = async () => {
     return
   }
 
-  submitting.value = true
-  const tempId = `temp-${Date.now()}`
-  const optimisticComment = {
-    _id: tempId,
-    _isNew: true,
-    content: content,
-    author: currentUser.value ? {
-      _id: currentUser.value.id,
-      username: currentUser.value.username
-    } : null,
-    createdAt: new Date().toISOString(),
-    article: route.params.id
-  }
-
-  comments.value.unshift(optimisticComment)
-  newComment.value = ''
-
   try {
-    const res = await commentApi.create({
-      content: content,
-      article: route.params.id
-    })
-
-    await nextTick()
-    const idx = comments.value.findIndex(c => c._id === tempId)
-    if (idx !== -1) {
-      comments.value.splice(idx, 1, { ...res.data, _isNew: false })
-    } else {
-      comments.value.unshift({ ...res.data, _isNew: false })
-    }
-
-    ElMessage({
-      message: '评论发表成功',
-      type: 'success',
-      duration: 2000
-    })
+    await commentStore.createComment(
+      { content, article: route.params.id },
+      userStore.userInfo
+    )
+    newComment.value = ''
+    ElMessage.success('评论发表成功')
   } catch (err) {
-    const idx = comments.value.findIndex(c => c._id === tempId)
-    if (idx !== -1) {
-      comments.value.splice(idx, 1)
-    }
-    newComment.value = content
     ElMessage.error(err.response?.data?.message || '评论发表失败，请重试')
-  } finally {
-    submitting.value = false
   }
 }
 
@@ -287,25 +218,19 @@ const deleteComment = async (comment) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-  } catch {
-    return
-  }
-
-  const originalComments = [...comments.value]
-  comments.value = comments.value.filter(c => c._id !== comment._id)
-
-  try {
-    await commentApi.delete(comment._id)
+    await commentStore.deleteComment(comment._id)
     ElMessage.success('删除成功')
-  } catch (err) {
-    comments.value = originalComments
-    ElMessage.error(err.response?.data?.message || '删除失败')
+  } catch {
   }
 }
 
 onMounted(() => {
-  loadArticle()
-  loadComments()
+  loadData()
+})
+
+onBeforeUnmount(() => {
+  articleStore.clearCurrentArticle()
+  commentStore.clearComments()
 })
 </script>
 
@@ -392,6 +317,13 @@ onMounted(() => {
   border-radius: 14px;
   font-size: 13px;
   font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.tag:hover {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
 }
 
 .content {
@@ -441,8 +373,8 @@ onMounted(() => {
 .count-badge {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 2px 10px;
-  border-radius: 12px;
+  padding: 2px 12px;
+  border-radius: 14px;
   font-size: 13px;
   font-weight: 500;
   min-width: 28px;

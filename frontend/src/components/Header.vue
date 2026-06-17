@@ -2,19 +2,48 @@
   <header class="header">
     <div class="container">
       <div class="logo">
-        <router-link to="/">我的博客</router-link>
+        <router-link to="/">
+          <el-icon class="logo-icon"><Reading /></el-icon>
+          我的博客
+        </router-link>
       </div>
       <nav class="nav">
-        <router-link to="/" class="nav-item">首页</router-link>
-        <router-link to="/articles" class="nav-item">文章列表</router-link>
-        <template v-if="isLoggedIn">
-          <router-link to="/admin" class="nav-item">管理后台</router-link>
-          <router-link to="/create" class="nav-item">写文章</router-link>
-          <button class="logout-btn" @click="logout">退出</button>
+        <router-link to="/" class="nav-item">
+          <el-icon><HomeFilled /></el-icon>
+          首页
+        </router-link>
+        <router-link to="/articles" class="nav-item">
+          <el-icon><Document /></el-icon>
+          文章列表
+        </router-link>
+        <template v-if="userStore.isLoggedIn">
+          <router-link to="/admin" class="nav-item">
+            <el-icon><Setting /></el-icon>
+            管理后台
+          </router-link>
+          <router-link to="/create" class="nav-item write-btn">
+            <el-icon><Edit /></el-icon>
+            写文章
+          </router-link>
+          <div class="user-menu">
+            <el-avatar :size="32" class="user-avatar">
+              {{ userStore.userInfo?.username?.charAt(0)?.toUpperCase() }}
+            </el-avatar>
+            <span class="username">{{ userStore.userInfo?.username }}</span>
+            <button class="logout-btn" @click="handleLogout" :title="退出登录">
+              <el-icon><SwitchButton /></el-icon>
+            </button>
+          </div>
         </template>
         <template v-else>
-          <router-link to="/login" class="nav-item">登录</router-link>
-          <router-link to="/register" class="nav-item">注册</router-link>
+          <router-link to="/login" class="nav-item">
+            <el-icon><User /></el-icon>
+            登录
+          </router-link>
+          <router-link to="/register" class="nav-item register-btn">
+            <el-icon><UserFilled /></el-icon>
+            注册
+          </router-link>
         </template>
       </nav>
     </div>
@@ -22,49 +51,47 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  Reading,
+  HomeFilled,
+  Document,
+  Setting,
+  Edit,
+  User,
+  UserFilled,
+  SwitchButton
+} from '@element-plus/icons-vue'
+import { useUserStore } from '../stores/user'
 
-const isLoggedIn = ref(false)
-const user = ref(null)
+const router = useRouter()
+const userStore = useUserStore()
 
-const checkAuth = () => {
-  const token = localStorage.getItem('token')
-  const userData = localStorage.getItem('user')
-  isLoggedIn.value = !!token
-  if (userData) {
-    user.value = JSON.parse(userData)
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('确定要退出登录吗？', '退出确认', {
+      confirmButtonText: '退出',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    userStore.logout()
+    ElMessage.success('已退出登录')
+    router.push('/')
+  } catch {
   }
 }
-
-const logout = () => {
-  localStorage.removeItem('token')
-  localStorage.removeItem('user')
-  isLoggedIn.value = false
-  user.value = null
-  window.location.href = '/'
-}
-
-onMounted(checkAuth)
-
-const handleStorageChange = () => {
-  checkAuth()
-}
-
-onMounted(() => {
-  window.addEventListener('storage', handleStorageChange)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('storage', handleStorageChange)
-})
 </script>
 
 <style scoped>
 .header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 16px 0;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 14px 0;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .container {
@@ -73,45 +100,141 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 20px;
+  padding: 0 24px;
 }
 
 .logo a {
-  font-size: 24px;
-  font-weight: bold;
+  font-size: 22px;
+  font-weight: 700;
   color: white;
   text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo-icon {
+  font-size: 28px;
 }
 
 .nav {
   display: flex;
-  gap: 20px;
+  gap: 8px;
   align-items: center;
 }
 
 .nav-item {
-  color: white;
+  color: rgba(255, 255, 255, 0.9);
   text-decoration: none;
   padding: 8px 16px;
   border-radius: 20px;
-  transition: background 0.3s;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .nav-item:hover {
   background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.nav-item.router-link-active {
+  background: rgba(255, 255, 255, 0.25);
+  color: white;
+}
+
+.write-btn {
+  background: rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.write-btn:hover {
+  background: white;
+  color: #667eea !important;
+  transform: translateY(-1px);
+}
+
+.register-btn {
+  background: rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.register-btn:hover {
+  background: white;
+  color: #667eea !important;
+}
+
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 12px;
+  padding-left: 16px;
+  border-left: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.user-avatar {
+  background: rgba(255, 255, 255, 0.3);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.username {
+  font-size: 14px;
+  font-weight: 500;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .logout-btn {
   background: rgba(255, 255, 255, 0.2);
   border: none;
   color: white;
-  padding: 8px 16px;
-  border-radius: 20px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   cursor: pointer;
-  transition: background 0.3s;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .logout-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.35);
+  transform: scale(1.1);
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 0 16px;
+  }
+
+  .logo a {
+    font-size: 18px;
+  }
+
+  .nav-item {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .nav-item span {
+    display: none;
+  }
+
+  .username {
+    display: none;
+  }
+
+  .user-menu {
+    padding-left: 10px;
+    margin-left: 6px;
+  }
 }
 </style>

@@ -2,7 +2,7 @@
   <div class="edit-article">
     <div class="container">
       <h1>编辑文章</h1>
-      <el-form :model="form" label-width="100px" v-loading="loading">
+      <el-form :model="form" label-width="100px" v-loading="articleStore.detailLoading">
         <el-form-item label="标题">
           <el-input
             v-model="form.title"
@@ -46,20 +46,20 @@
                 @change="handleTagSelect"
               >
                 <el-option
-                  v-for="tag in allTags"
+                  v-for="tag in tagStore.tags"
                   :key="tag._id"
                   :label="tag.name"
                   :value="tag.name"
                 >
                   <span class="option-tag">#{{ tag.name }}</span>
-                  <span class="option-count">({{ tag.count }}篇)</span>
+                  <span class="option-count">({{ tag.count || 0 }}篇)</span>
                 </el-option>
               </el-select>
             </div>
-            <div class="tag-tips">
+            <div class="tag-tips" v-if="tagStore.popularTags.length > 0">
               <span class="tip-title">推荐标签:</span>
               <span
-                v-for="tag in popularTags"
+                v-for="tag in tagStore.popularTags"
                 :key="tag._id"
                 :class="['quick-tag', { disabled: tagList.includes(tag.name) }]"
                 :style="{ borderColor: tag.color, color: tag.color }"
@@ -79,7 +79,7 @@
         </el-form-item>
         <div class="form-actions">
           <el-button size="large" @click="cancel">取消</el-button>
-          <el-button size="large" type="primary" @click="submit" :loading="submitting">
+          <el-button size="large" type="primary" @click="submit" :loading="articleStore.loading">
             <el-icon><Edit /></el-icon>
             保存修改
           </el-button>
@@ -90,15 +90,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
-import { articles as articleApi, tags as tagApi } from '../api'
+import { useArticleStore } from '../stores/article'
+import { useTagStore } from '../stores/tag'
 
 const route = useRoute()
-const loading = ref(false)
-const submitting = ref(false)
+const router = useRouter()
+const articleStore = useArticleStore()
+const tagStore = useTagStore()
+
 const form = ref({
   title: '',
   category: '默认',
@@ -108,42 +111,24 @@ const form = ref({
 
 const tagList = ref([])
 const tagInput = ref([])
-const allTags = ref([])
-const popularTags = ref([])
-
-const loadTags = async () => {
-  try {
-    const [allRes, popularRes] = await Promise.all([
-      tagApi.list(),
-      tagApi.popular(12)
-    ])
-    allTags.value = allRes.data
-    popularTags.value = popularRes.data
-  } catch (err) {
-    console.error(err)
-  }
-}
-
-const loadArticle = async () => {
-  loading.value = true
-  try {
-    const res = await articleApi.get(route.params.id)
-    const article = res.data
-    form.value.title = article.title
-    form.value.category = article.category || '默认'
-    form.value.content = article.content
-    tagList.value = [...(article.tags || [])]
-  } catch (err) {
-    console.error(err)
-    ElMessage.error('加载文章失败')
-  } finally {
-    loading.value = false
-  }
-}
 
 watch(tagList, () => {
   form.value.tags = tagList.value.join(',')
 }, { immediate: true })
+
+const loadArticle = async () => {
+  try {
+    const article = await articleStore.loadArticleDetail(route.params.id)
+    if (article) {
+      form.value.title = article.title
+      form.value.category = article.category || '默认'
+      form.value.content = article.content
+      tagList.value = [...(article.tags || [])]
+    }
+  } catch (err) {
+    ElMessage.error('加载文章失败')
+  }
+}
 
 const handleTagSelect = (values) => {
   const newTags = values.filter(t => !tagList.value.includes(t))
@@ -175,27 +160,29 @@ const submit = async () => {
     ElMessage.error('文章内容至少需要10个字符')
     return
   }
-  submitting.value = true
   try {
-    await articleApi.update(route.params.id, form.value)
+    await articleStore.updateArticle(route.params.id, form.value)
     ElMessage.success('保存成功！')
-    setTimeout(() => {
-      window.location.href = '/admin'
-    }, 1000)
+    router.push('/admin')
   } catch (err) {
     ElMessage.error(err.response?.data?.message || '保存失败')
-  } finally {
-    submitting.value = false
   }
 }
 
 const cancel = () => {
-  window.history.back()
+  router.back()
 }
 
-onMounted(() => {
-  loadArticle()
-  loadTags()
+onMounted(async () => {
+  await Promise.all([
+    loadArticle(),
+    tagStore.loadAllTags(),
+    tagStore.loadPopularTags(12)
+  ])
+})
+
+onBeforeUnmount(() => {
+  articleStore.clearCurrentArticle()
 })
 </script>
 

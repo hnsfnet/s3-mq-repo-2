@@ -1,99 +1,145 @@
 <template>
   <div class="home">
-    <div class="hero">
-      <div class="container">
-        <h1>欢迎来到我的博客</h1>
-        <p>记录生活，分享技术，交流心得</p>
-        <div class="search-box">
-          <el-input
-            v-model="searchQuery"
-            placeholder="搜索文章标题或内容..."
-            size="large"
-            clearable
-            @keyup.enter="handleSearch"
-            @clear="handleSearch"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-            <template #append>
-              <el-button @click="handleSearch">搜索</el-button>
-            </template>
-          </el-input>
-        </div>
-      </div>
-    </div>
     <div class="container">
-      <div class="content-wrapper">
-        <div class="main-content">
+      <section class="hero">
+        <div class="hero-content">
+          <h1 class="hero-title">欢迎来到我的博客</h1>
+          <p class="hero-subtitle">记录技术、生活与思考</p>
+          <div class="hero-search">
+            <el-input
+              v-model="searchQuery"
+              placeholder="搜索文章..."
+              size="large"
+              clearable
+              @keyup.enter="handleSearch"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+            <el-button type="primary" size="large" @click="handleSearch">
+              搜索
+            </el-button>
+          </div>
+        </div>
+      </section>
+
+      <div class="main-content">
+        <div class="articles-section">
           <div class="section-header">
             <h2>
-              {{ selectedTag ? `标签: ${selectedTag}` : searchQuery ? `搜索结果: "${searchQuery}"` : '最新文章' }}
+              <el-icon><Document /></el-icon>
+              {{ hasFilters ? '搜索结果' : '最新文章' }}
             </h2>
-            <el-button
-              v-if="selectedTag || searchQuery"
-              link
-              @click="clearFilters"
-            >清除筛选</el-button>
-          </div>
-          <div class="article-list">
-            <div
-              v-for="article in articles"
-              :key="article._id"
-              class="article-card"
-            >
-              <h3>
-                <router-link :to="`/article/${article._id}`">{{ article.title }}</router-link>
-              </h3>
-              <p class="meta">
-                <span>{{ article.author?.username }}</span>
-                <span>{{ formatDate(article.createdAt) }}</span>
-                <span>阅读 {{ article.views }}</span>
-                <span v-if="article.category" class="category">{{ article.category }}</span>
-              </p>
-              <p class="excerpt">{{ article.content.substring(0, 100) }}...</p>
-              <div class="tags">
-                <span
-                  v-for="tag in article.tags"
-                  :key="tag"
-                  class="tag"
-                  @click="filterByTag(tag)"
-                >#{{ tag }}</span>
-              </div>
+            <div v-if="hasFilters" class="active-filters">
+              <el-tag
+                v-if="articleStore.filters.search"
+                closable
+                type="info"
+                @close="clearSearch"
+              >
+                搜索: {{ articleStore.filters.search }}
+              </el-tag>
+              <el-tag
+                v-if="articleStore.filters.tag"
+                closable
+                type="success"
+                @close="clearTag"
+              >
+                标签: {{ articleStore.filters.tag }}
+              </el-tag>
             </div>
           </div>
-          <div v-if="articles.length === 0 && loading === false" class="empty">
-            <el-empty description="没有找到相关文章" />
+
+          <div v-loading="articleStore.loading" class="articles-grid">
+            <router-link
+              v-for="article in articleStore.articles"
+              :key="article._id"
+              :to="`/article/${article._id}`"
+              class="article-card"
+            >
+              <div class="card-header">
+                <h3 class="card-title">{{ article.title }}</h3>
+              </div>
+              <p class="card-summary">{{ truncateText(article.content, 120) }}</p>
+              <div class="card-tags" v-if="article.tags && article.tags.length > 0">
+                <span
+                  v-for="tag in article.tags.slice(0, 3)"
+                  :key="tag"
+                  class="card-tag"
+                  @click.stop="filterByTag(tag)"
+                >{{ tag }}</span>
+              </div>
+              <div class="card-footer">
+                <span class="author">
+                  <el-icon><User /></el-icon>
+                  {{ article.author?.username || '匿名' }}
+                </span>
+                <span class="views">
+                  <el-icon><View /></el-icon>
+                  {{ article.views || 0 }}
+                </span>
+                <span class="date">
+                  <el-icon><Calendar /></el-icon>
+                  {{ formatDate(article.createdAt) }}
+                </span>
+              </div>
+            </router-link>
           </div>
-          <div v-if="loading" class="loading">
-            <el-skeleton :rows="3" animated />
+
+          <div v-if="!articleStore.loading && articleStore.articles.length === 0" class="empty">
+            <el-empty description="暂无文章" />
+          </div>
+
+          <div v-if="articleStore.total > articleStore.articles.length" class="load-more">
+            <el-button @click="loadMore" :loading="loadingMore">
+              加载更多
+            </el-button>
           </div>
         </div>
+
         <aside class="sidebar">
           <div class="sidebar-card">
-            <h3>热门标签</h3>
-            <div class="tag-cloud">
+            <h3 class="sidebar-title">
+              <el-icon><TrendCharts /></el-icon>
+              热门标签
+            </h3>
+            <div v-loading="tagStore.loading" class="tag-cloud">
               <span
-                v-for="tag in popularTags"
-                :key="tag._id"
-                :class="['sidebar-tag', { active: selectedTag === tag.name }]"
-                :style="{ backgroundColor: tag.color + '20', color: tag.color, borderColor: tag.color }"
+                v-for="tag in tagStore.popularTags"
+                :key="tag._id || tag.name"
+                :class="['tag-item', { active: articleStore.filters.tag === tag.name }]"
+                :style="{ fontSize: getTagFontSize(tag.count) + 'px' }"
                 @click="filterByTag(tag.name)"
               >
                 #{{ tag.name }}
-                <span class="count">{{ tag.count }}</span>
+                <span class="count">{{ tag.count || 0 }}</span>
               </span>
             </div>
-            <div v-if="popularTags.length === 0" class="empty-tags">
+            <div v-if="!tagStore.loading && tagStore.popularTags.length === 0" class="empty-tags">
               暂无标签
             </div>
           </div>
+
           <div class="sidebar-card">
-            <h3>分类浏览</h3>
-            <router-link to="/articles" class="browse-all">
-              <el-icon><Reading /></el-icon>
-              查看全部文章
-            </router-link>
+            <h3 class="sidebar-title">
+              <el-icon><DataAnalysis /></el-icon>
+              数据统计
+            </h3>
+            <div class="stats-list">
+              <div class="stat-item">
+                <span class="stat-number">{{ articleStore.total }}</span>
+                <span class="stat-label">文章总数</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-number">{{ tagStore.total }}</span>
+                <span class="stat-label">标签总数</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-number">{{ totalViews }}</span>
+                <span class="stat-label">总阅读量</span>
+              </div>
+            </div>
           </div>
         </aside>
       </div>
@@ -102,308 +148,403 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { Search, Reading } from '@element-plus/icons-vue'
-import { articles as articleApi, tags as tagApi } from '../api'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
+import {
+  Search,
+  Document,
+  User,
+  View,
+  Calendar,
+  TrendCharts,
+  DataAnalysis
+} from '@element-plus/icons-vue'
+import { useArticleStore } from '../stores/article'
+import { useTagStore } from '../stores/tag'
 
-const articles = ref([])
-const popularTags = ref([])
+const router = useRouter()
+const articleStore = useArticleStore()
+const tagStore = useTagStore()
 const searchQuery = ref('')
-const selectedTag = ref('')
-const loading = ref(false)
+const loadingMore = ref(false)
+
+const hasFilters = computed(() => {
+  return articleStore.filters.search || articleStore.filters.tag
+})
+
+const totalViews = computed(() => {
+  return articleStore.articles.reduce((sum, article) => sum + (article.views || 0), 0)
+})
 
 const formatDate = (dateStr) => {
+  if (!dateStr) return ''
   const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN')
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
 }
 
-const loadArticles = async () => {
-  loading.value = true
-  try {
-    const params = {}
-    if (searchQuery.value) {
-      params.search = searchQuery.value
-    }
-    if (selectedTag.value) {
-      params.tag = selectedTag.value
-    }
-    const res = await articleApi.list(params)
-    articles.value = res.data.slice(0, 10)
-  } catch (err) {
-    console.error(err)
-  } finally {
-    loading.value = false
-  }
+const truncateText = (text, maxLength) => {
+  if (!text) return ''
+  if (text.length <= maxLength) return text
+  return text.substring(0, maxLength) + '...'
 }
 
-const loadPopularTags = async () => {
-  try {
-    const res = await tagApi.popular(15)
-    popularTags.value = res.data
-  } catch (err) {
-    console.error(err)
-  }
+const getTagFontSize = (count) => {
+  const baseSize = 12
+  const maxSize = 20
+  const maxCount = 20
+  const size = baseSize + (count / maxCount) * (maxSize - baseSize)
+  return Math.min(size, maxSize)
 }
 
 const handleSearch = () => {
-  loadArticles()
+  router.push({
+    path: '/articles',
+    query: { search: searchQuery.value }
+  })
 }
 
 const filterByTag = (tagName) => {
-  selectedTag.value = selectedTag.value === tagName ? '' : tagName
-  searchQuery.value = ''
-  loadArticles()
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+  router.push({
+    path: '/articles',
+    query: { tag: tagName }
+  })
 }
 
-const clearFilters = () => {
-  searchQuery.value = ''
-  selectedTag.value = ''
+const clearSearch = () => {
+  articleStore.setFilter('search', '')
   loadArticles()
 }
 
-onMounted(() => {
+const clearTag = () => {
+  articleStore.setFilter('tag', '')
   loadArticles()
-  loadPopularTags()
+}
+
+const loadArticles = async () => {
+  await articleStore.loadArticles({ page: 1 })
+}
+
+const loadMore = async () => {
+  if (loadingMore.value) return
+  loadingMore.value = true
+  try {
+    await articleStore.loadMoreArticles()
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+onMounted(async () => {
+  articleStore.setFilter('page', 1)
+  await Promise.all([
+    articleStore.loadArticles(),
+    tagStore.loadPopularTags(10)
+  ])
 })
 </script>
 
 <style scoped>
 .home {
   min-height: 100vh;
-}
-
-.hero {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 60px 0 80px;
-  text-align: center;
-}
-
-.hero h1 {
-  font-size: 42px;
-  margin-bottom: 12px;
-}
-
-.hero p {
-  font-size: 16px;
-  margin-bottom: 28px;
-  opacity: 0.9;
-}
-
-.search-box {
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-.search-box :deep(.el-input__wrapper) {
-  border-radius: 25px 0 0 25px;
-  padding: 8px 16px;
-}
-
-.search-box :deep(.el-input-group__append) {
-  border-radius: 0 25px 25px 0;
+  padding-bottom: 60px;
 }
 
 .container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 40px 20px;
+  padding: 0 20px;
 }
 
-.content-wrapper {
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 32px;
+.hero {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 20px;
+  padding: 60px 40px;
+  margin: 30px 0 40px;
+  color: white;
+  text-align: center;
 }
 
-@media (max-width: 768px) {
-  .content-wrapper {
-    grid-template-columns: 1fr;
-  }
+.hero-title {
+  font-size: 42px;
+  margin-bottom: 12px;
+  font-weight: 700;
+}
+
+.hero-subtitle {
+  font-size: 18px;
+  opacity: 0.9;
+  margin-bottom: 30px;
+}
+
+.hero-search {
+  display: flex;
+  gap: 12px;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.hero-search :deep(.el-input__wrapper) {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.main-content {
+  display: flex;
+  gap: 30px;
+}
+
+.articles-section {
+  flex: 1;
+  min-width: 0;
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid #667eea;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .section-header h2 {
-  font-size: 24px;
+  font-size: 22px;
   margin: 0;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.article-list {
-  display: grid;
-  gap: 20px;
+.active-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.articles-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 200px;
 }
 
 .article-card {
   background: white;
-  padding: 24px;
   border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  padding: 24px;
+  text-decoration: none;
+  color: inherit;
   transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: block;
 }
 
 .article-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 24px rgba(102, 126, 234, 0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
-.article-card h3 a {
-  color: #333;
-  text-decoration: none;
-  font-size: 20px;
-  margin-bottom: 10px;
-  display: block;
-  transition: color 0.3s;
-}
-
-.article-card h3 a:hover {
-  color: #667eea;
-}
-
-.meta {
-  color: #999;
-  font-size: 13px;
+.card-header {
   margin-bottom: 12px;
 }
 
-.meta span {
-  margin-right: 16px;
+.card-title {
+  font-size: 19px;
+  margin: 0;
+  color: #222;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
-.category {
-  background: #f0f0f0;
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-
-.excerpt {
+.card-summary {
   color: #666;
   line-height: 1.7;
   margin-bottom: 14px;
   font-size: 14px;
 }
 
-.tags {
+.card-tags {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  margin-bottom: 14px;
   flex-wrap: wrap;
 }
 
-.tag {
-  background: linear-gradient(135deg, #f5f7fa 0%, #e4e7ec 100%);
-  padding: 4px 12px;
-  border-radius: 14px;
-  font-size: 12px;
+.card-tag {
+  background: #f0f4ff;
   color: #667eea;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 12px;
   cursor: pointer;
-  transition: all 0.3s;
-  font-weight: 500;
+  transition: all 0.2s;
 }
 
-.tag:hover {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.card-tag:hover {
+  background: #667eea;
   color: white;
 }
 
+.card-footer {
+  display: flex;
+  gap: 16px;
+  color: #999;
+  font-size: 13px;
+  padding-top: 12px;
+  border-top: 1px solid #f5f5f5;
+}
+
+.card-footer span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.empty {
+  padding: 60px 0;
+}
+
+.load-more {
+  text-align: center;
+  margin-top: 30px;
+}
+
 .sidebar {
-  position: sticky;
-  top: 20px;
-  align-self: flex-start;
+  width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .sidebar-card {
   background: white;
-  padding: 20px;
   border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-  margin-bottom: 20px;
+  padding: 22px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
-.sidebar-card h3 {
-  font-size: 16px;
-  margin-bottom: 16px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #eee;
+.sidebar-title {
+  font-size: 17px;
+  margin: 0 0 16px;
   color: #333;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
 }
 
 .tag-cloud {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-height: 60px;
 }
 
-.sidebar-tag {
+.tag-item {
+  background: #f7f8fa;
+  color: #666;
   padding: 6px 12px;
   border-radius: 14px;
-  font-size: 12px;
   cursor: pointer;
-  border: 1px solid transparent;
-  transition: all 0.3s;
-  display: inline-flex;
+  transition: all 0.25s;
+  font-size: 13px;
+  display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.sidebar-tag:hover {
-  transform: scale(1.05);
+.tag-item:hover {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
 }
 
-.sidebar-tag.active {
-  font-weight: bold;
+.tag-item.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
 }
 
-.sidebar-tag .count {
-  font-size: 10px;
-  opacity: 0.8;
-  background: rgba(0, 0, 0, 0.1);
-  padding: 1px 6px;
-  border-radius: 8px;
+.tag-item .count {
+  font-size: 11px;
+  opacity: 0.7;
 }
 
 .empty-tags {
-  color: #999;
-  font-size: 13px;
   text-align: center;
-  padding: 20px;
+  color: #ccc;
+  padding: 20px 0;
+  font-size: 14px;
 }
 
-.browse-all {
+.stats-list {
   display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.stat-item:last-child {
+  border-bottom: none;
+}
+
+.stat-number {
+  font-size: 22px;
+  font-weight: 700;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 8px;
-  text-decoration: none;
-  font-weight: 500;
-  transition: all 0.3s;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-.browse-all:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+.stat-label {
+  color: #888;
+  font-size: 14px;
 }
 
-.empty {
-  text-align: center;
-  padding: 60px 20px;
-  background: white;
-  border-radius: 12px;
+@media (max-width: 960px) {
+  .main-content {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+  }
+
+  .hero {
+    padding: 40px 24px;
+  }
+
+  .hero-title {
+    font-size: 30px;
+  }
 }
 
-.loading {
-  background: white;
-  padding: 24px;
-  border-radius: 12px;
+@media (max-width: 640px) {
+  .hero {
+    padding: 30px 16px;
+  }
+
+  .hero-title {
+    font-size: 24px;
+  }
+
+  .article-card {
+    padding: 18px;
+  }
+
+  .card-title {
+    font-size: 17px;
+  }
 }
 </style>

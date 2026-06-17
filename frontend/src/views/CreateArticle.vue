@@ -46,20 +46,20 @@
                 @change="handleTagSelect"
               >
                 <el-option
-                  v-for="tag in allTags"
+                  v-for="tag in tagStore.tags"
                   :key="tag._id"
                   :label="tag.name"
                   :value="tag.name"
                 >
                   <span class="option-tag">#{{ tag.name }}</span>
-                  <span class="option-count">({{ tag.count }}篇)</span>
+                  <span class="option-count">({{ tag.count || 0 }}篇)</span>
                 </el-option>
               </el-select>
             </div>
-            <div class="tag-tips">
+            <div class="tag-tips" v-if="tagStore.popularTags.length > 0">
               <span class="tip-title">推荐标签:</span>
               <span
-                v-for="tag in popularTags"
+                v-for="tag in tagStore.popularTags"
                 :key="tag._id"
                 :class="['quick-tag', { disabled: tagList.includes(tag.name) }]"
                 :style="{ borderColor: tag.color, color: tag.color }"
@@ -80,7 +80,7 @@
         <div class="form-actions">
           <el-button size="large" @click="cancel">取消</el-button>
           <el-button size="large" type="default" @click="saveDraft">保存草稿</el-button>
-          <el-button size="large" type="primary" @click="submit" :loading="submitting">
+          <el-button size="large" type="primary" @click="submit" :loading="articleStore.loading">
             <el-icon><Promotion /></el-icon>
             发布文章
           </el-button>
@@ -91,10 +91,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Promotion } from '@element-plus/icons-vue'
-import { articles as articleApi, tags as tagApi } from '../api'
+import { useArticleStore } from '../stores/article'
+import { useTagStore } from '../stores/tag'
+
+const router = useRouter()
+const articleStore = useArticleStore()
+const tagStore = useTagStore()
 
 const form = ref({
   title: '',
@@ -105,22 +111,6 @@ const form = ref({
 
 const tagList = ref([])
 const tagInput = ref([])
-const allTags = ref([])
-const popularTags = ref([])
-const submitting = ref(false)
-
-const loadTags = async () => {
-  try {
-    const [allRes, popularRes] = await Promise.all([
-      tagApi.list(),
-      tagApi.popular(12)
-    ])
-    allTags.value = allRes.data
-    popularTags.value = popularRes.data
-  } catch (err) {
-    console.error(err)
-  }
-}
 
 watch(tagList, () => {
   form.value.tags = tagList.value.join(',')
@@ -156,17 +146,12 @@ const submit = async () => {
     ElMessage.error('文章内容至少需要10个字符')
     return
   }
-  submitting.value = true
   try {
-    await articleApi.create(form.value)
+    await articleStore.createArticle(form.value)
     ElMessage.success('发布成功！')
-    setTimeout(() => {
-      window.location.href = '/admin'
-    }, 1000)
+    router.push('/admin')
   } catch (err) {
     ElMessage.error(err.response?.data?.message || '发布失败')
-  } finally {
-    submitting.value = false
   }
 }
 
@@ -174,16 +159,27 @@ const saveDraft = () => {
   ElMessage.info('草稿功能开发中...')
 }
 
-const cancel = () => {
+const cancel = async () => {
   if (form.value.title || form.value.content) {
-    if (!confirm('确定要取消吗？已输入的内容将丢失。')) {
+    try {
+      await ElMessageBox.confirm('确定要取消吗？已输入的内容将丢失。', '取消确认', {
+        confirmButtonText: '确定取消',
+        cancelButtonText: '继续编辑',
+        type: 'warning'
+      })
+    } catch {
       return
     }
   }
-  window.history.back()
+  router.back()
 }
 
-onMounted(loadTags)
+onMounted(async () => {
+  await Promise.all([
+    tagStore.loadAllTags(),
+    tagStore.loadPopularTags(12)
+  ])
+})
 </script>
 
 <style scoped>
