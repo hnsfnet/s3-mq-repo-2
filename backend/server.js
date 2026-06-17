@@ -18,6 +18,7 @@ mongoose.connect('mongodb://localhost:27017/blog', {
 app.use('/api/auth', require('./routes/auth'))
 app.use('/api/articles', require('./routes/articles'))
 app.use('/api/comments', require('./routes/comments'))
+app.use('/api/tags', require('./routes/tags'))
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)

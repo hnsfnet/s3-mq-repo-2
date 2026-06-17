@@ -36,7 +36,7 @@ export const auth = {
 }
 
 export const articles = {
-  list: () => instance.get('/articles'),
+  list: (params = {}) => instance.get('/articles', { params }),
   get: id => instance.get(`/articles/${id}`),
   create: data => instance.post('/articles', data),
   update: (id, data) => instance.put(`/articles/${id}`, data),
@@ -47,6 +47,14 @@ export const comments = {
   list: articleId => instance.get(`/comments/article/${articleId}`),
   create: data => instance.post('/comments', data),
   delete: id => instance.delete(`/comments/${id}`)
+}
+
+export const tags = {
+  list: () => instance.get('/tags'),
+  popular: (limit = 10) => instance.get(`/tags/popular?limit=${limit}`),
+  create: data => instance.post('/tags', data),
+  update: (id, data) => instance.put(`/tags/${id}`, data),
+  delete: id => instance.delete(`/tags/${id}`)
 }
 
 export default instance
