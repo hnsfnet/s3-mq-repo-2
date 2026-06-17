@@ -20,14 +20,11 @@ const authenticate = (req, res, next) => {
 router.get('/article/:articleId', async (req, res) => {
   try {
     const comments = await Comment.find({ article: req.params.articleId, parentComment: null })
-      .populate('author', 'username')
-      .populate({
-        path: 'children',
-        populate: { path: 'author', select: 'username' }
-      })
+      .populate('author', 'username email')
       .sort({ createdAt: -1 })
     res.json(comments)
   } catch (err) {
+    console.error(err)
     res.status(500).json({ message: '服务器错误' })
   }
 })
@@ -35,15 +32,28 @@ router.get('/article/:articleId', async (req, res) => {
 router.post('/', authenticate, async (req, res) => {
   try {
     const { content, article, parentComment } = req.body
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ message: '评论内容不能为空' })
+    }
+    if (!article) {
+      return res.status(400).json({ message: '缺少文章ID' })
+    }
+
     const comment = await Comment.create({
-      content,
+      content: content.trim(),
       article,
       author: req.user.id,
       parentComment: parentComment || null
     })
-    await comment.populate('author', 'username')
-    res.status(201).json(comment)
+    await comment.populate('author', 'username email')
+    
+    const result = comment.toObject()
+    result.createdAt = comment.createdAt
+    
+    res.status(201).json(result)
   } catch (err) {
+    console.error(err)
     res.status(500).json({ message: '服务器错误' })
   }
 })
