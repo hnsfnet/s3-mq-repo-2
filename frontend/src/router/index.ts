@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import Home from '../views/Home.vue'
 import Login from '../views/Login.vue'
 import Register from '../views/Register.vue'
@@ -9,7 +9,7 @@ import CreateArticle from '../views/CreateArticle.vue'
 import EditArticle from '../views/EditArticle.vue'
 import { useUserStore } from '../stores/user'
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   { path: '/', name: 'Home', component: Home },
   { path: '/login', name: 'Login', component: Login },
   { path: '/register', name: 'Register', component: Register },
@@ -25,11 +25,11 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const userStore = useUserStore()
-  const authRequired = ['Admin', 'CreateArticle', 'EditArticle']
-  
-  if (authRequired.includes(to.name) && !userStore.isLoggedIn) {
+  const authRequired: string[] = ['Admin', 'CreateArticle', 'EditArticle']
+
+  if (authRequired.includes(to.name as string) && !userStore.isLoggedIn) {
     next({ name: 'Login', query: { redirect: to.fullPath } })
   } else {
     next()

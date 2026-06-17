@@ -2,36 +2,52 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { tags as tagApi } from '../api'
 
+interface Tag {
+  _id: string
+  name: string
+  description?: string
+  color: string
+  count: number
+  createdAt?: string
+  [key: string]: any
+}
+
+interface TagCreateData {
+  name: string
+  description?: string
+  color?: string
+}
+
 export const useTagStore = defineStore('tag', () => {
-  const tags = ref([])
-  const popularTags = ref([])
-  const currentTag = ref(null)
+  const tags = ref<Tag[]>([])
+  const popularTags = ref<Tag[]>([])
+  const currentTag = ref<Tag | null>(null)
   const loading = ref(false)
   const total = ref(0)
 
   const allTags = computed(() => tags.value)
 
   const tagMap = computed(() => {
-    const map = {}
+    const map: Record<string, Tag> = {}
     ;[...tags.value, ...popularTags.value].forEach(tag => {
       map[tag.name] = tag
     })
     return map
   })
 
-  const loadAllTags = async (params = {}) => {
+  const loadAllTags = async (params: Record<string, any> = {}): Promise<Tag[]> => {
     loading.value = true
     try {
       const res = await tagApi.list(params)
       tags.value = res.data
-      total.value = res.meta?.total || res.data.length
+      total.value = res.meta?.total || (res.data || []).length
       return res.data
     } finally {
       loading.value = false
     }
   }
 
-  const loadPopularTags = async (limit = 10) => {
+  const loadPopularTags = async (limit: number = 10): Promise<Tag[]> => {
     loading.value = true
     try {
       const res = await tagApi.popular(limit)
@@ -42,18 +58,18 @@ export const useTagStore = defineStore('tag', () => {
     }
   }
 
-  const loadTagDetail = async (name) => {
+  const loadTagDetail = async (name: string): Promise<Tag> => {
     loading.value = true
     try {
       const res = await tagApi.get(name)
-      currentTag.value = res.data.tag
+      currentTag.value = res.data?.tag || res.data
       return res.data
     } finally {
       loading.value = false
     }
   }
 
-  const createTag = async (data) => {
+  const createTag = async (data: TagCreateData): Promise<Tag> => {
     loading.value = true
     try {
       const res = await tagApi.create(data)
@@ -64,7 +80,7 @@ export const useTagStore = defineStore('tag', () => {
     }
   }
 
-  const updateTag = async (id, data) => {
+  const updateTag = async (id: string, data: Partial<TagCreateData>): Promise<Tag> => {
     loading.value = true
     try {
       const res = await tagApi.update(id, data)
@@ -82,7 +98,7 @@ export const useTagStore = defineStore('tag', () => {
     }
   }
 
-  const deleteTag = async (id) => {
+  const deleteTag = async (id: string): Promise<boolean> => {
     loading.value = true
     try {
       await tagApi.delete(id)
@@ -97,13 +113,13 @@ export const useTagStore = defineStore('tag', () => {
     }
   }
 
-  const getTagByName = (name) => {
-    return tags.value.find(t => t.name === name) || 
+  const getTagByName = (name: string): Tag | undefined => {
+    return tags.value.find(t => t.name === name) ||
            popularTags.value.find(t => t.name === name) ||
            tagMap.value[name]
   }
 
-  const getTagColor = (name) => {
+  const getTagColor = (name: string): string => {
     const tag = getTagByName(name)
     return tag?.color || '#667eea'
   }

@@ -2,22 +2,48 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { auth } from '../api'
 
+interface UserInfo {
+  id: string
+  username: string
+  email?: string
+  [key: string]: any
+}
+
+interface LoginForm {
+  username: string
+  password: string
+}
+
+interface RegisterForm {
+  username: string
+  email: string
+  password: string
+}
+
 export const useUserStore = defineStore('user', () => {
-  const token = ref(localStorage.getItem('token') || '')
-  const userInfo = ref(JSON.parse(localStorage.getItem('user') || 'null'))
+  const token = ref<string>(localStorage.getItem('token') || '')
+  const userInfo = ref<UserInfo | null>(
+    (() => {
+      try {
+        return JSON.parse(localStorage.getItem('user') || 'null')
+      } catch {
+        return null
+      }
+    })()
+  )
   const loading = ref(false)
-  const error = ref(null)
+  const error = ref<Error | null>(null)
 
   const isLoggedIn = computed(() => !!token.value)
 
-  const persistAuth = (newToken, user) => {
+  const persistAuth = (newToken: string, user: UserInfo) => {
     token.value = newToken
     userInfo.value = user
     localStorage.setItem('token', newToken)
     localStorage.setItem('user', JSON.stringify(user))
   }
 
-  const login = async (formData) => {
+  const login = async (formData: LoginForm): Promise<UserInfo> => {
     loading.value = true
     error.value = null
     try {
@@ -32,14 +58,14 @@ export const useUserStore = defineStore('user', () => {
       persistAuth(newToken, user)
       return user
     } catch (err) {
-      error.value = err
+      error.value = err as Error
       throw err
     } finally {
       loading.value = false
     }
   }
 
-  const register = async (formData) => {
+  const register = async (formData: RegisterForm): Promise<UserInfo> => {
     loading.value = true
     error.value = null
     try {
@@ -54,14 +80,14 @@ export const useUserStore = defineStore('user', () => {
       persistAuth(newToken, user)
       return user
     } catch (err) {
-      error.value = err
+      error.value = err as Error
       throw err
     } finally {
       loading.value = false
     }
   }
 
-  const fetchCurrentUser = async () => {
+  const fetchCurrentUser = async (): Promise<UserInfo | null> => {
     if (!token.value) return null
 
     try {
@@ -69,7 +95,7 @@ export const useUserStore = defineStore('user', () => {
       userInfo.value = res.data?.user || res.data
       localStorage.setItem('user', JSON.stringify(userInfo.value))
       return userInfo.value
-    } catch (err) {
+    } catch {
       return null
     }
   }
@@ -82,9 +108,11 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('user')
   }
 
-  const updateUserInfo = (data) => {
-    userInfo.value = { ...userInfo.value, ...data }
-    localStorage.setItem('user', JSON.stringify(userInfo.value))
+  const updateUserInfo = (data: Partial<UserInfo>) => {
+    if (userInfo.value) {
+      userInfo.value = { ...userInfo.value, ...data }
+      localStorage.setItem('user', JSON.stringify(userInfo.value))
+    }
   }
 
   const clearError = () => {

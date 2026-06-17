@@ -2,8 +2,37 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { comments as commentApi } from '../api'
 
+interface CommentAuthor {
+  _id: string
+  username: string
+  email?: string
+}
+
+interface Comment {
+  _id: string
+  _isNew?: boolean
+  _tempId?: string
+  content: string
+  author: CommentAuthor | null
+  createdAt: string
+  article: string
+  parentComment?: string | null
+  [key: string]: any
+}
+
+interface CommentCreateData {
+  content: string
+  article: string
+  parentComment?: string | null
+}
+
+interface UserInfo {
+  id: string
+  username: string
+}
+
 export const useCommentStore = defineStore('comment', () => {
-  const comments = ref([])
+  const comments = ref<Comment[]>([])
   const loading = ref(false)
   const submitting = ref(false)
   const currentArticleId = ref('')
@@ -11,23 +40,23 @@ export const useCommentStore = defineStore('comment', () => {
 
   const commentCount = computed(() => comments.value.length)
 
-  const loadComments = async (articleId) => {
+  const loadComments = async (articleId: string): Promise<Comment[]> => {
     if (!articleId) return []
     loading.value = true
     currentArticleId.value = articleId
     try {
       const res = await commentApi.list(articleId)
       comments.value = res.data || []
-      total.value = res.meta?.total || res.data.length
+      total.value = res.meta?.total || (res.data || []).length
       return res.data
     } finally {
       loading.value = false
     }
   }
 
-  const addCommentOptimistic = (commentData, userInfo) => {
+  const addCommentOptimistic = (commentData: CommentCreateData, userInfo: UserInfo | null): string => {
     const tempId = `temp-${Date.now()}`
-    const optimisticComment = {
+    const optimisticComment: Comment = {
       _id: tempId,
       _isNew: true,
       _tempId: tempId,
@@ -44,14 +73,14 @@ export const useCommentStore = defineStore('comment', () => {
     return tempId
   }
 
-  const replaceTempComment = (tempId, realComment) => {
+  const replaceTempComment = (tempId: string, realComment: Comment) => {
     const idx = comments.value.findIndex(c => c._id === tempId)
     if (idx !== -1) {
       comments.value.splice(idx, 1, { ...realComment, _isNew: false })
     }
   }
 
-  const removeTempComment = (tempId) => {
+  const removeTempComment = (tempId: string) => {
     const idx = comments.value.findIndex(c => c._id === tempId)
     if (idx !== -1) {
       comments.value.splice(idx, 1)
@@ -59,7 +88,7 @@ export const useCommentStore = defineStore('comment', () => {
     }
   }
 
-  const createComment = async (commentData, userInfo) => {
+  const createComment = async (commentData: CommentCreateData, userInfo: UserInfo | null): Promise<Comment> => {
     const tempId = addCommentOptimistic(commentData, userInfo)
     submitting.value = true
 
@@ -75,7 +104,7 @@ export const useCommentStore = defineStore('comment', () => {
     }
   }
 
-  const deleteComment = async (commentId) => {
+  const deleteComment = async (commentId: string): Promise<boolean> => {
     const originalComments = [...comments.value]
     const originalTotal = total.value
     comments.value = comments.value.filter(c => c._id !== commentId)
@@ -91,9 +120,9 @@ export const useCommentStore = defineStore('comment', () => {
     }
   }
 
-  const canDeleteComment = (comment, currentUser) => {
+  const canDeleteComment = (comment: Comment, currentUser: UserInfo | null): boolean => {
     if (!currentUser || !comment.author) return false
-    return comment.author._id === currentUser.id || 
+    return comment.author._id === currentUser.id ||
            comment.author.username === currentUser.username
   }
 

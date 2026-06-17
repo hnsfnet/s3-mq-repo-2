@@ -25,6 +25,4 @@ const TagSchema = new mongoose.Schema({
   }
 })
 
-TagSchema.index({ name: 1 })
-
 module.exports = mongoose.model('Tag', TagSchema)

@@ -2,13 +2,45 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { articles as articleApi } from '../api'
 
+interface Article {
+  _id: string
+  title: string
+  content: string
+  category?: string
+  tags?: string[]
+  views: number
+  author?: {
+    _id: string
+    username: string
+  }
+  createdAt: string
+  updatedAt?: string
+  [key: string]: any
+}
+
+interface ArticleFilters {
+  search: string
+  tag: string
+  category: string
+  sort: string
+  page: number
+  limit: number
+}
+
+interface ArticleData {
+  title: string
+  content: string
+  category?: string
+  tags?: string
+}
+
 export const useArticleStore = defineStore('article', () => {
-  const articles = ref([])
-  const currentArticle = ref(null)
+  const articles = ref<Article[]>([])
+  const currentArticle = ref<Article | null>(null)
   const loading = ref(false)
   const detailLoading = ref(false)
   const total = ref(0)
-  const filters = ref({
+  const filters = ref<ArticleFilters>({
     search: '',
     tag: '',
     category: '',
@@ -18,7 +50,7 @@ export const useArticleStore = defineStore('article', () => {
   })
 
   const sortedArticles = computed(() => {
-    let result = [...articles.value]
+    const result = [...articles.value]
     if (filters.value.sort === 'views') {
       result.sort((a, b) => b.views - a.views)
     }
@@ -29,10 +61,10 @@ export const useArticleStore = defineStore('article', () => {
     return articles.value.length < total.value
   })
 
-  const loadArticles = async (params = {}) => {
+  const loadArticles = async (params: Partial<ArticleFilters> = {}): Promise<Article[]> => {
     loading.value = true
     try {
-      const queryParams = {}
+      const queryParams: Record<string, any> = {}
 
       if (filters.value.search || params.search) {
         queryParams.search = params.search !== undefined ? params.search : filters.value.search
@@ -57,8 +89,9 @@ export const useArticleStore = defineStore('article', () => {
       queryParams.limit = limit
 
       Object.keys(params).forEach(key => {
-        if (params[key] !== undefined) {
-          filters.value[key] = params[key]
+        const k = key as keyof ArticleFilters
+        if (params[k] !== undefined) {
+          (filters.value as any)[k] = params[k]
         }
       })
 
@@ -71,13 +104,13 @@ export const useArticleStore = defineStore('article', () => {
     }
   }
 
-  const loadMoreArticles = async () => {
-    if (loading.value || !hasMore.value) return
+  const loadMoreArticles = async (): Promise<Article[]> => {
+    if (loading.value || !hasMore.value) return []
 
     loading.value = true
     try {
       const nextPage = filters.value.page + 1
-      const queryParams = {}
+      const queryParams: Record<string, any> = {}
 
       if (filters.value.search) queryParams.search = filters.value.search
       if (filters.value.tag) queryParams.tag = filters.value.tag
@@ -99,7 +132,7 @@ export const useArticleStore = defineStore('article', () => {
     }
   }
 
-  const loadArticleDetail = async (id) => {
+  const loadArticleDetail = async (id: string): Promise<Article> => {
     detailLoading.value = true
     try {
       const res = await articleApi.get(id)
@@ -110,7 +143,7 @@ export const useArticleStore = defineStore('article', () => {
     }
   }
 
-  const createArticle = async (data) => {
+  const createArticle = async (data: ArticleData): Promise<Article> => {
     loading.value = true
     try {
       const res = await articleApi.create(data)
@@ -122,7 +155,7 @@ export const useArticleStore = defineStore('article', () => {
     }
   }
 
-  const updateArticle = async (id, data) => {
+  const updateArticle = async (id: string, data: ArticleData): Promise<Article> => {
     loading.value = true
     try {
       const res = await articleApi.update(id, data)
@@ -139,7 +172,7 @@ export const useArticleStore = defineStore('article', () => {
     }
   }
 
-  const deleteArticle = async (id) => {
+  const deleteArticle = async (id: string): Promise<boolean> => {
     loading.value = true
     try {
       await articleApi.delete(id)
@@ -154,7 +187,7 @@ export const useArticleStore = defineStore('article', () => {
     }
   }
 
-  const setFilter = (key, value) => {
+  const setFilter = (key: keyof ArticleFilters, value: any) => {
     filters.value[key] = value
   }
 
@@ -169,7 +202,7 @@ export const useArticleStore = defineStore('article', () => {
     }
   }
 
-  const incrementViews = (id) => {
+  const incrementViews = (id: string) => {
     const article = articles.value.find(a => a._id === id)
     if (article) {
       article.views++
